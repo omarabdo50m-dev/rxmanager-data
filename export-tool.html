@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>RxManager → GitHub Export Tool</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; }
+  h1 { font-size: 20px; color: #14b8a6; margin-bottom: 4px; }
+  p { font-size: 13px; color: #94a3b8; margin-bottom: 20px; }
+  .card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #334155; }
+  .card h2 { font-size: 14px; font-weight: 700; margin-bottom: 12px; color: #f1f5f9; }
+  button { background: #0d9488; color: #fff; border: none; border-radius: 8px; padding: 12px 20px; font-size: 14px; font-weight: 700; cursor: pointer; width: 100%; margin-bottom: 8px; font-family: inherit; transition: .15s; }
+  button:hover { background: #0f766e; }
+  button.secondary { background: #1e3a5f; }
+  button.secondary:hover { background: #1e40af; }
+  button:disabled { background: #334155; color: #64748b; cursor: default; }
+  .status { font-size: 12px; padding: 10px 14px; border-radius: 8px; margin-top: 8px; line-height: 1.6; }
+  .status.ok   { background: #064e3b; color: #6ee7b7; border: 1px solid #065f46; }
+  .status.warn { background: #451a03; color: #fcd34d; border: 1px solid #78350f; }
+  .status.info { background: #0f172a; color: #94a3b8; border: 1px solid #334155; }
+  .file-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #334155; }
+  .file-row:last-child { border-bottom: none; }
+  .file-name { flex: 1; font-size: 13px; font-weight: 600; color: #e2e8f0; }
+  .file-count { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: #0d9488; color: #fff; }
+  .file-count.empty { background: #334155; color: #64748b; }
+  .dl-btn { background: #1d4ed8; padding: 6px 14px; font-size: 12px; width: auto; margin: 0; border-radius: 6px; }
+  .dl-btn:hover { background: #1e40af; }
+  pre { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; font-size: 11px; overflow-x: auto; color: #94a3b8; max-height: 200px; overflow-y: auto; }
+  .step { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
+  .step-num { width: 24px; height: 24px; border-radius: 50%; background: #0d9488; color: #fff; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .step-text { font-size: 13px; color: #cbd5e1; line-height: 1.6; }
+  .step-text strong { color: #f1f5f9; }
+  a { color: #14b8a6; }
+</style>
+</head>
+<body>
+
+<h1>💊 RxManager → GitHub Export Tool</h1>
+<p>Reads your IndexedDB data and downloads it as properly formatted JSON files ready to upload to your GitHub repo.</p>
+
+<div class="card">
+  <h2>📋 Instructions</h2>
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-text">Open this file in the <strong>same browser</strong> where you use RxManager Pro (so it can read your IndexedDB)</div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-text">Click <strong>Read My Data</strong> below to load your drugs and products</div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-text">Download <strong>drugs.json</strong> and <strong>products.json</strong></div>
+  </div>
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-text">Go to your GitHub repo → <strong>drugs/</strong> folder → upload both files (they will replace the empty ones)</div>
+  </div>
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-text">Commit with message: <code>feat: migrate existing drug library from IndexedDB</code></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>🔍 Step 1 — Read Your IndexedDB Data</h2>
+  <button onclick="readData()">Read My Data</button>
+  <div id="readStatus" class="status info">Click the button above to scan your IndexedDB databases</div>
+</div>
+
+<div class="card" id="resultsCard" style="display:none">
+  <h2>📦 Step 2 — Download Files</h2>
+  <div id="fileRows"></div>
+  <div style="margin-top:16px">
+    <button onclick="downloadAll()" id="dlAllBtn">⬇️ Download Both Files</button>
+  </div>
+  <div id="dlStatus" class="status info" style="display:none"></div>
+</div>
+
+<div class="card" id="previewCard" style="display:none">
+  <h2>👀 Data Preview</h2>
+  <div id="previewContent"></div>
+</div>
+
+<div class="card">
+  <h2>🔗 After Upload</h2>
+  <p style="font-size:12px;color:#94a3b8;margin:0 0 8px">Your CDN URLs will be:</p>
+  <pre>https://cdn.jsdelivr.net/gh/omarabdo50m-dev/rxmanager-data@main/drugs/drugs.json
+https://cdn.jsdelivr.net/gh/omarabdo50m-dev/rxmanager-data@main/drugs/products.json</pre>
+  <p style="font-size:12px;color:#94a3b8;margin:8px 0 0">jsDelivr CDN can take up to 24h to propagate a new repo for the first time, but usually works within minutes.</p>
+</div>
+
+<script>
+'use strict';
+
+let _drugs = [];
+let _products = [];
+
+// Try to open each known DB version
+async function openDB(name, version) {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(name, version);
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror  = () => reject(req.error);
+    req.onblocked = () => reject(new Error('blocked'));
+  });
+}
+
+async function getAllFromStore(db, storeName) {
+  if (!db.objectStoreNames.contains(storeName)) return [];
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly');
+    const req = tx.objectStore(storeName).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function tryDB(name, version) {
+  try {
+    const db = await openDB(name, version);
+    const stores = Array.from(db.objectStoreNames);
+    return { db, stores };
+  } catch(e) {
+    return null;
+  }
+}
+
+// Normalise a drug record to the current schema
+function normaliseDrug(d) {
+  // Resolve group/subgroup from old 'type' field if needed
+  const TYPE_MAP = {
+    'Antibiotics':'Antimicrobials','Antivirals':'Antimicrobials','Antifungals':'Antimicrobials',
+    'Analgesics/NSAIDs':'Analgesic Agents','Opioids':'Analgesic Agents',
+    'GI/Gastro':'Gastrointestinal Drugs','Antacids/PPIs/H2':'Gastrointestinal Drugs',
+    'Antiemetics':'Gastrointestinal Drugs','Antidiarrhoeals':'Gastrointestinal Drugs',
+    'Laxatives':'Gastrointestinal Drugs','Respiratory':'Respiratory System',
+    'Bronchodilators':'Respiratory System','Antihistamines':'Antihistamines',
+    'Antihypertensives':'Cardiovascular Drugs','Antiarrhythmics':'Cardiovascular Drugs',
+    'Statins/Lipid-Lowering':'Drugs of Dyslipidaemia','Anticoagulants':'Blood',
+    'Antiplatelets':'Blood','Antidiabetics':'Endocrine','Insulin':'Endocrine',
+    'Thyroid':'Endocrine','Steroids/Corticosteroids':'Endocrine',
+    'Vitamins/Supplements':'Nutrition and Vitamins','Antiepileptics':'Central Nervous System',
+    'Antidepressants':'Central Nervous System','Antipsychotics':'Central Nervous System',
+    'Anxiolytics/Hypnotics':'Central Nervous System','Dermatology':'Dermatology',
+    'Urology':'Miscellaneous','OB/GYN':'Endocrine','Other':'Miscellaneous',
+  };
+
+  const VALID_GROUPS = [
+    'Antimicrobials','Autonomic Nervous System','Analgesic Agents','Gastrointestinal Drugs',
+    'Respiratory System','Antihistamines','Cardiovascular Drugs','Drugs of Dyslipidaemia',
+    'Blood','Endocrine','Central Nervous System','Ophthalmology','Dermatology',
+    'Nutrition and Vitamins','Miscellaneous'
+  ];
+
+  let group = d.group || d.type || 'Miscellaneous';
+  if (!VALID_GROUPS.includes(group)) {
+    group = TYPE_MAP[group] || 'Miscellaneous';
+  }
+
+  return {
+    id:                  d.id,
+    name:                (d.name || '').toLowerCase().trim(),
+    group,
+    subgroup:            d.subgroup || '',
+    therapeuticClass:    d.therapeuticClass    || '',
+    pharmacologicalClass:d.pharmacologicalClass|| '',
+    moa:                 d.mech || '',
+    commonUses:          d.commonUses          || '',
+    dose:                d.dose                || '',
+    maxDose:             d.max                 || '',
+    pedDose:             d.pedDose             || '',
+    pedAgeLimit:         d.pedAgeLimit         || '',
+    pedDoseAr:           d.pedDoseAr           || '',
+    pregnancyT1:         d.pregnancyT1         || 'N',
+    pregnancyT2:         d.pregnancyT2         || 'N',
+    pregnancyT3:         d.pregnancyT3         || 'N',
+    lactation:           d.lactation           || '',
+    lactationNote:       d.lactationNote       || '',
+    crossesBBB:          d.crossesBBB          ?? null,
+    crossesPlacenta:     d.crossesPlacenta     ?? null,
+    metabolism:          d.metabolism          || '',
+    elimination:         d.elimination         || '',
+    interactions:        d.interactions        || '',
+    doseAdjustments:     d.doseAdjustments     || '',
+    sideEffects:         d.sideEffects         || '',
+    contra:              d.contra              || '',
+    additionalInfo:      d.additionalInfo      || '',
+    combinations:        d.combinations        || [],
+    isPublished:         false,
+    source:              d.source              || '',
+    lastUpdated:         new Date().toISOString().slice(0,10),
+    version:             1,
+  };
+}
+
+function normaliseProduct(p, drugs) {
+  // Try to find parent drug name for reference
+  const parentDrug = drugs.find(d => d.id === p.genericId);
+  return {
+    id:          p.id,
+    drugId:      p.genericId || '',
+    brand:       p.brand     || '',
+    brandAr:     p.brandAr   || '',
+    formula:     p.formula   || '',
+    conc:        p.conc      || '',
+    dose:        p.dose      || '',
+    doseAr:      p.doseAr    || '',
+    isPublished: false,
+    lastUpdated: new Date().toISOString().slice(0,10),
+  };
+}
+
+async function readData() {
+  const statusEl = document.getElementById('readStatus');
+  statusEl.className = 'status info';
+  statusEl.textContent = 'Scanning IndexedDB databases…';
+
+  const dbNames = [
+    { name: 'rxpro_v19', version: 1 },
+    { name: 'rxpro_v18', version: 1 },
+    { name: 'rxpro_v11', version: 1 },
+  ];
+
+  let foundLib = [];
+  let foundProds = [];
+  let foundDBName = '';
+
+  for (const { name, version } of dbNames) {
+    const result = await tryDB(name, version);
+    if (!result) continue;
+    const { db, stores } = result;
+
+    if (stores.includes('library')) {
+      const lib  = await getAllFromStore(db, 'library');
+      const prods = stores.includes('products') ? await getAllFromStore(db, 'products') : [];
+      if (lib.length > 0) {
+        foundLib   = lib;
+        foundProds = prods;
+        foundDBName = name;
+        db.close();
+        break;
+      }
+    }
+    db.close();
+  }
+
+  if (!foundLib.length) {
+    statusEl.className = 'status warn';
+    statusEl.innerHTML = `⚠️ No drug library found in IndexedDB.<br><br>
+      Make sure you're opening this file in the <strong>same browser</strong> where you use RxManager Pro.<br><br>
+      If you're on mobile, you'll need to export from RxManager's Settings → Export Backup instead, then paste the JSON below.`;
+    return;
+  }
+
+  // Normalise records
+  _drugs    = foundLib.map(d => normaliseDrug(d));
+  _products = foundProds.map(p => normaliseProduct(p, _drugs));
+
+  // Also recover old-style brands that were stored on the drug record itself
+  let recoveredBrandCount = 0;
+  for (const drug of foundLib) {
+    const oldBrands = (drug.brands || []).filter(b => typeof b === 'string' && b.trim());
+    if (!oldBrands.length) continue;
+    // Check if we already have products for this drug
+    const hasProds = _products.some(p => p.drugId === drug.id);
+    if (!hasProds) {
+      oldBrands.forEach(brand => {
+        _products.push({
+          id:          'recovered_' + drug.id + '_' + brand.replace(/\W/g,'_'),
+          drugId:      drug.id,
+          brand:       brand.trim(),
+          brandAr:     '',
+          formula:     'Tablet',
+          conc:        drug.conc || '',
+          dose:        drug.dose || '',
+          doseAr:      drug.doseAr || '',
+          isPublished: false,
+          lastUpdated: new Date().toISOString().slice(0,10),
+        });
+        recoveredBrandCount++;
+      });
+    }
+  }
+
+  statusEl.className = 'status ok';
+  statusEl.innerHTML = `✅ Found database: <strong>${foundDBName}</strong><br>
+    📦 <strong>${_drugs.length} generics</strong> loaded<br>
+    🏷️ <strong>${_products.length} brand/product records</strong> (${_products.length - recoveredBrandCount} from products store + ${recoveredBrandCount} recovered from old brand arrays)`;
+
+  // Show results
+  renderResults();
+  renderPreview();
+}
+
+function renderResults() {
+  document.getElementById('resultsCard').style.display = 'block';
+  document.getElementById('fileRows').innerHTML = `
+    <div class="file-row">
+      <div class="file-name">📄 drugs/drugs.json</div>
+      <span class="file-count${_drugs.length === 0 ? ' empty' : ''}">${_drugs.length} records</span>
+      <button class="dl-btn" onclick="downloadFile('drugs')">⬇ Download</button>
+    </div>
+    <div class="file-row">
+      <div class="file-name">📄 drugs/products.json</div>
+      <span class="file-count${_products.length === 0 ? ' empty' : ''}">${_products.length} records</span>
+      <button class="dl-btn" onclick="downloadFile('products')">⬇ Download</button>
+    </div>`;
+}
+
+function renderPreview() {
+  document.getElementById('previewCard').style.display = 'block';
+  const sample = _drugs.slice(0, 3);
+  document.getElementById('previewContent').innerHTML = `
+    <p style="font-size:12px;color:#94a3b8;margin:0 0 8px">First 3 drugs (sample):</p>
+    <pre>${JSON.stringify(sample, null, 2)}</pre>`;
+}
+
+function downloadFile(type) {
+  const data = type === 'drugs' ? _drugs : _products;
+  const filename = type === 'drugs' ? 'drugs.json' : 'products.json';
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  const statusEl = document.getElementById('dlStatus');
+  statusEl.style.display = 'block';
+  statusEl.className = 'status ok';
+  statusEl.textContent = `✅ ${filename} downloaded — upload it to your GitHub repo at drugs/${filename}`;
+}
+
+function downloadAll() {
+  downloadFile('drugs');
+  setTimeout(() => downloadFile('products'), 500);
+
+  const statusEl = document.getElementById('dlStatus');
+  statusEl.style.display = 'block';
+  statusEl.className = 'status ok';
+  statusEl.innerHTML = `✅ Both files downloading…<br><br>
+    Upload them to your GitHub repo:<br>
+    • Go to <strong>github.com/omarabdo50m-dev/rxmanager-data</strong><br>
+    • Navigate into the <strong>drugs/</strong> folder<br>
+    • Click <strong>Add file → Upload files</strong><br>
+    • Drop both JSON files in<br>
+    • Commit with message: <code>feat: migrate drug library from IndexedDB</code>`;
+}
+</script>
+</body>
+</html>
